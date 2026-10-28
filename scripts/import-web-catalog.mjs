@@ -2,11 +2,38 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import sharp from "sharp";
+import { isSportsSupplementName } from "../catalog/supplement-rules.mjs";
 
 // Executado manualmente. O build e o site publicado usam somente os arquivos locais.
 const research =
   process.env.CATALOG_RESEARCH_DIR || resolve(".cache/catalog-research");
 const refresh = process.argv.includes("--refresh");
+const append = process.argv.includes("--append");
+const expandPerfumes = process.argv.includes("--expand-perfumes");
+if (append && expandPerfumes)
+  throw new Error("Escolha apenas um modo de importação incremental.");
+const perfumeGroups = new Set(["lattafa", "perfumes-importados"]);
+const perfumeSourceKeys = new Set([
+  "lattafa",
+  "lattafa-best",
+  "perfume",
+  "dior",
+  "designer-best",
+]);
+const targetFor = (group) => (perfumeGroups.has(group) ? 150 : 50);
+const extraGroups = new Set(["roupas", "acessorios", "suplementos"]);
+const extraSourceKeys = new Set([
+  "insider",
+  "insider-more",
+  "new-era-us",
+  "new-era-apparel",
+  "chilli-accessories",
+  "chilli-accessories-more",
+  "muscletech",
+  "max-titanium",
+  "max-titanium-more",
+  "max-titanium-third",
+]);
 const sources = {
   lattafa: ["https://www.lattafa-usa.com", "/products.json?limit=250"],
   "lattafa-best": [
@@ -22,6 +49,10 @@ const sources = {
     "/collections/body-splash/products.json?limit=250",
   ],
   perfume: ["https://www.perfumeonline.ca", "/products.json?limit=250"],
+  "designer-best": [
+    "https://www.perfumeonline.ca",
+    "/collections/featured-products/products.json?limit=250",
+  ],
   dior: [
     "https://www.perfumeonline.ca",
     "/collections/christian-dior/products.json?limit=250",
@@ -70,29 +101,66 @@ const sources = {
   ],
   cosrx: ["https://www.cosrx.com", "/products.json?limit=250"],
   sallve: ["https://www.sallve.com.br", "/products.json?limit=250"],
+  insider: ["https://www.insiderstore.com.br", "/products.json?limit=250"],
+  "insider-more": [
+    "https://www.insiderstore.com.br",
+    "/products.json?limit=250&page=2",
+  ],
+  "new-era-us": ["https://www.neweracap.com", "/products.json?limit=250"],
+  "new-era-apparel": [
+    "https://www.neweracap.com",
+    "/collections/apparel/products.json?limit=250",
+  ],
+  "chilli-accessories": [
+    "https://loja.chillibeans.com.br",
+    "/api/catalog_system/pub/products/search?ft=acessorios&_from=0&_to=49",
+  ],
+  "chilli-accessories-more": [
+    "https://loja.chillibeans.com.br",
+    "/api/catalog_system/pub/products/search?ft=acessorios&_from=50&_to=99",
+  ],
+  muscletech: ["https://www.muscletech.com", "/products.json?limit=250"],
+  "max-titanium": [
+    "https://www.maxtitanium.com.br",
+    "/api/catalog_system/pub/products/search?_from=0&_to=49",
+  ],
+  "max-titanium-more": [
+    "https://www.maxtitanium.com.br",
+    "/api/catalog_system/pub/products/search?_from=50&_to=99",
+  ],
+  "max-titanium-third": [
+    "https://www.maxtitanium.com.br",
+    "/api/catalog_system/pub/products/search?_from=100&_to=149",
+  ],
 };
 
 await mkdir(research, { recursive: true });
 const data = {};
 await Promise.all(
-  Object.entries(sources).map(async ([key, [origin, path]]) => {
-    const file = resolve(research, `${key}.json`);
-    if (!refresh) {
-      try {
-        data[key] = JSON.parse(await readFile(file, "utf8"));
-        return;
-      } catch {
-        /* Baixar a fonte ausente. */
+  Object.entries(sources)
+    .filter(([key]) =>
+      expandPerfumes
+        ? perfumeSourceKeys.has(key)
+        : !append || extraSourceKeys.has(key),
+    )
+    .map(async ([key, [origin, path]]) => {
+      const file = resolve(research, `${key}.json`);
+      if (!refresh) {
+        try {
+          data[key] = JSON.parse(await readFile(file, "utf8"));
+          return;
+        } catch {
+          /* Baixar a fonte ausente. */
+        }
       }
-    }
-    const response = await fetch(origin + path, {
-      signal: AbortSignal.timeout(30000),
-    });
-    if (!response.ok)
-      throw new Error(`Fonte indisponível: ${key} (${response.status})`);
-    data[key] = await response.json();
-    await writeFile(file, JSON.stringify(data[key]));
-  }),
+      const response = await fetch(origin + path, {
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!response.ok)
+        throw new Error(`Fonte indisponível: ${key} (${response.status})`);
+      data[key] = await response.json();
+      await writeFile(file, JSON.stringify(data[key]));
+    }),
 );
 
 const normalize = (value) =>
@@ -115,7 +183,7 @@ const unique = (list) => {
       result.set(product.key, product);
   return [...result.values()];
 };
-const list = (key) => data[key].products || data[key];
+const list = (key) => data[key]?.products || data[key] || [];
 const excluded =
   /giveaway|free.?gift|refurbished|renewed|discontinued|rare\s*&|vintage|gift card|^copy\b|test product|shipinsure|insurance|shipping protection|package protection|extended warranty/i;
 const usableImage = (image) =>
@@ -134,11 +202,29 @@ function shop(key, brand, category, filter = () => true) {
     )
     .map((p) => {
       const title = clean(p.title);
-      const mainImage =
+      let mainImage =
         p.images.find(
           (image) =>
             usableImage(image) && image.width >= 180 && image.height >= 180,
         ) || p.images.find(usableImage);
+      if (brand === "Insider" && category === "roupas") {
+        const photos = p.images.filter(
+          (image) =>
+            usableImage(image) &&
+            !/\/Frame[_-]|kit[_-]|a_unidade|desconto|pague|ganhe|promo/i.test(
+              image.src,
+            ),
+        );
+        mainImage =
+          photos.find(
+            (image) =>
+              /\.jpe?g(?:\?|$)/i.test(image.src) &&
+              image.width >= 180 &&
+              image.height >= 180,
+          ) ||
+          photos[0] ||
+          mainImage;
+      }
       return {
         key: `${brand}:${normalize(title)}`,
         id: `${key.replace(/[^a-z0-9]/g, "-").toUpperCase()}-${p.id}`,
@@ -155,17 +241,24 @@ function shop(key, brand, category, filter = () => true) {
     });
 }
 
-function vtex(key, brand, category, filter) {
+function vtex(key, brand, category, filter, variants = false) {
   return list(key)
     .filter(filter)
     .flatMap((p) =>
       p.items
-        .slice(0, 1)
+        .slice(0, variants ? undefined : 1)
         .filter((item) => item.images?.length)
         .map((item) => ({
-          key: `${brand}:${p.productId}`,
-          id: `${brand === "JanSport" ? "JSP" : "CHILLI"}-${p.productId}`,
-          name: clean(item.nameComplete || p.productName),
+          key: `${brand}:${p.productId}${variants ? ":" + item.itemId : ""}`,
+          id: `${brand === "JanSport" ? "JSP" : brand === "Chilli Beans" ? "CHILLI" : brand.toUpperCase().replace(/[^A-Z0-9]+/g, "-")}-${p.productId}${variants ? "-" + item.itemId : ""}`,
+          name:
+            category === "suplementos"
+              ? clean(p.productName).split(/\s+[—–]\s+/)[0] +
+                (item.name &&
+                !normalize(p.productName).includes(normalize(item.name))
+                  ? ` — ${clean(item.name)}`
+                  : "")
+              : clean(item.nameComplete || p.productName),
           brand,
           category,
           image: item.images[0].imageUrl,
@@ -190,9 +283,16 @@ function roundRobin(...lists) {
 }
 
 const lattafa = unique([
-  ...shop("lattafa-best", "Lattafa", "perfumes", p => /^lattafa/i.test(p.vendor)),
-  ...shop("lattafa", "Lattafa", "perfumes", p => /^lattafa/i.test(p.vendor)),
-]).filter((p) => !/gift.?set|collection|sample|discovery/i.test(p.name));
+  ...shop("lattafa-best", "Lattafa", "perfumes", (p) =>
+    /^lattafa/i.test(p.vendor),
+  ),
+  ...shop("lattafa", "Lattafa", "perfumes", (p) => /^lattafa/i.test(p.vendor)),
+]).filter(
+  (p) =>
+    !/gift.?set|collection|sample|discovery|air.?fresh|room.?spray|incense|candle|bakhoor|bukhoor|deodorant/i.test(
+      p.name,
+    ),
+);
 const perfumePriority = [
   "Yara",
   "Khamrah",
@@ -259,19 +359,17 @@ vs.sort(
 );
 
 const designerBrands =
-  /^(Kilian|Guerlain|Bvlgari|Narciso Rodriguez|Nina Ricci|Marc Jacobs|Escada|Dolce Gabbana|Ariana Grande|Carolina Herrera|Burberry|Issey Miyake|Lacoste|Mont Blanc|Jean Paul Gaultier|Jimmy Choo|Paco Rabanne|Prada|Lancome|Giorgio Armani|Hermes|Givenchy|Tom Ford|Yves Saint Laurent|Valentino|Thierry Mugler|Ralph Lauren|Hugo Boss|Creed|Moschino)$/i;
+  /^(Kilian|Guerlain|Bvlgari|Narciso Rodriguez|Nina Ricci|Marc Jacobs|Escada|Dolce Gabbana|Ariana Grande|Carolina Herrera|Burberry|Issey Miyake|Lacoste|Mont Blanc|Jean Paul Gaultier|Jimmy Choo|Paco Rabanne|Prada|Lancome|Giorgio Armani|Hermes|Givenchy|Tom Ford|Yves Saint Laurent|Valentino|Thierry Mugler|Ralph Lauren|Hugo Boss|Creed|Moschino|Versace|Gucci|Calvin Klein|Kenzo|Azzaro|Mancera|Montale|Boucheron|Armaf|Chloe|Cartier|Cacharel|Lalique|Nautica|Bentley)$/i;
+const designerFrom = (key) =>
+  shop(key, "", "perfumes", (p) => designerBrands.test(p.vendor)).map((p) => ({
+    ...p,
+    brand: p.source_vendor,
+    key: `${p.source_vendor}:${normalize(p.name)}`,
+  }));
 const designer = roundRobin(
   shop("dior", "Dior", "perfumes").slice(0, 15),
-  shop("perfume", "", "perfumes", (p) => designerBrands.test(p.vendor)).map(
-    (p) => {
-      const original = list("perfume").find(
-        (source) => source.title === p.source_title,
-      );
-      p.brand = original.vendor;
-      p.key = `${p.brand}:${normalize(p.name)}`;
-      return p;
-    },
-  ),
+  designerFrom("perfume"),
+  designerFrom("designer-best"),
 );
 
 const technology = roundRobin(
@@ -364,7 +462,69 @@ const beauty = roundRobin(
   ),
 );
 
-const groups = {
+const clothingFilter = (p) =>
+  !/kit|combo|pack|excluir|brinde|gift|100% off|\bteste?\b|leve\s*\d|pague|compre.*ganhe|desconto\s*progressivo|--\s*$/i.test(
+    `${p.title} ${p.product_type}`,
+  ) &&
+  /t-shirt|tee\b|camiseta|camisa|cal[cç]a|short|bermuda|legging|regata|top\b|vestido|jacket|moletom|hoodie|crewneck|sweat|polo|pants|skirt|saia|jaqueta|body|bodysuit/i.test(
+    `${p.title} ${p.product_type}`,
+  );
+const clothes = roundRobin(
+  shop("new-era-apparel", "New Era", "roupas", (p) =>
+    /APPAREL/i.test(p.product_type),
+  ),
+  unique([
+    ...shop("insider", "Insider", "roupas", clothingFilter),
+    ...shop("insider-more", "Insider", "roupas", clothingFilter),
+  ]),
+);
+const accessoryFilter = (p) =>
+  /berloque|colar|pulseira|anel\b|brinco|corrente|chaveiro|carteira|cinto|bon[eé]|bolsa|len[cç]o|flanela|case\b|estojo/i.test(
+    p.productName,
+  ) && !/[oó]culos|arma[cç][aã]o|rel[oó]gio|limpa lentes/i.test(p.productName);
+const accessories = roundRobin(
+  shop("new-era-us", "New Era", "acessorios", (p) =>
+    /HEADWEAR/i.test(p.product_type),
+  ),
+  unique([
+    ...vtex(
+      "chilli-accessories",
+      "Chilli Beans",
+      "acessorios",
+      accessoryFilter,
+    ),
+    ...vtex(
+      "chilli-accessories-more",
+      "Chilli Beans",
+      "acessorios",
+      accessoryFilter,
+    ),
+  ]),
+);
+const supplementFilter = (p) =>
+  isSportsSupplementName(p.productName) &&
+  !/kit|combo|display|brinde|sach[eê]|bar\b|barra/i.test(p.productName);
+const supplementBase = unique(
+  ["max-titanium", "max-titanium-more", "max-titanium-third"].flatMap((key) =>
+    vtex(key, "Max Titanium", "suplementos", supplementFilter),
+  ),
+);
+const supplementVariants = unique(
+  ["max-titanium", "max-titanium-more", "max-titanium-third"].flatMap((key) =>
+    vtex(key, "Max Titanium", "suplementos", supplementFilter, true),
+  ),
+);
+const supplements = unique([
+  ...roundRobin(
+    shop("muscletech", "MuscleTech", "suplementos", (p) =>
+      isSportsSupplementName(p.title),
+    ),
+    supplementBase,
+  ),
+  ...supplementVariants,
+]);
+
+const allGroups = {
   lattafa,
   "victorias-secret": vs,
   "perfumes-importados": designer,
@@ -373,16 +533,32 @@ const groups = {
   oculos: glasses,
   mochilas: backpacks,
   beleza: beauty,
+  roupas: clothes,
+  acessorios: accessories,
+  suplementos: supplements,
 };
+const groups = expandPerfumes
+  ? Object.fromEntries(
+      Object.entries(allGroups).filter(([group]) => perfumeGroups.has(group)),
+    )
+  : append
+    ? Object.fromEntries(
+        Object.entries(allGroups).filter(([group]) => extraGroups.has(group)),
+      )
+    : allGroups;
 console.log(
   "Candidatos:",
   Object.fromEntries(
     Object.entries(groups).map(([key, value]) => [key, value.length]),
   ),
 );
-if (Object.values(groups).some((group) => group.length < 50))
+if (
+  Object.entries(groups).some(
+    ([group, candidates]) => candidates.length < targetFor(group),
+  )
+)
   throw new Error(
-    "Uma seleção não possui 50 candidatos distintos. Revise as fontes antes de importar.",
+    "Uma seleção não possui candidatos suficientes para a meta. Revise as fontes antes de importar.",
   );
 
 const descriptions = {
@@ -400,26 +576,86 @@ const descriptions = {
     "Óculos de sol por encomenda. Confirme a referência, a cor e o tamanho com a Kauany.",
   mochilas:
     "Mochila por encomenda. Consulte a cor, a referência e a disponibilidade com a Kauany.",
+  roupas:
+    "Roupa por encomenda. Confirme o modelo, a cor e o tamanho com a Kauany.",
+  acessorios:
+    "Acessório por encomenda. Consulte o modelo, a referência e a disponibilidade com a Kauany.",
+  suplementos:
+    "Nutrição esportiva por encomenda. Confirme sabor, peso da embalagem e disponibilidade com a Kauany.",
 };
 
 const successful = Object.fromEntries(
   Object.keys(groups).map((group) => [group, []]),
 );
 let previousSources = new Map();
+let previousProducts = [];
+let previousSourceRecords = [];
 try {
+  previousProducts = JSON.parse(
+    await readFile("public/data/products.json", "utf8"),
+  );
+  previousSourceRecords = JSON.parse(
+    await readFile("catalog/image-sources.json", "utf8"),
+  );
   previousSources = new Map(
-    JSON.parse(await readFile("catalog/image-sources.json", "utf8")).map(
-      (source) => [source.id, source.source_image_url],
-    ),
+    previousSourceRecords.map((source) => [source.id, source.source_image_url]),
   );
 } catch {
   /* Primeira importação. */
 }
-const hashes = new Set();
-const seenImages = new Set();
+if (
+  expandPerfumes &&
+  (!previousProducts.length || !previousSourceRecords.length)
+)
+  throw new Error(
+    "A expansão precisa de um catálogo existente com registro das imagens.",
+  );
+const retainedSources = expandPerfumes
+  ? previousSourceRecords
+  : append
+    ? previousSourceRecords.filter((source) => !extraGroups.has(source.group))
+    : [];
+const replacedIds = new Set(
+  previousSourceRecords
+    .filter((source) => extraGroups.has(source.group))
+    .map((source) => source.id),
+);
+const retainedProducts = expandPerfumes
+  ? previousProducts
+  : append
+    ? previousProducts.filter((product) => !replacedIds.has(product.id))
+    : [];
+const hashes = new Set(retainedSources.map((source) => source.sha256));
+const seenImages = new Set(
+  retainedSources.map((source) => source.source_image_url.split("?")[0]),
+);
+const existingIds = new Set(retainedProducts.map((product) => product.id));
+const existingSourceUrls = new Set(
+  retainedSources.map((source) => source.source_url.replace(/\/$/, "")),
+);
+const productKey = (brand, name) =>
+  `${normalize(brand)}:${normalize(name)
+    .replace(/^perfume\s+/, "")
+    .replace(/\s+/g, " ")
+    .trim()}`;
+const existingProductKeys = new Set(
+  retainedProducts.map((product) => productKey(product.brand, product.name)),
+);
+const existingCountFor = (group) =>
+  expandPerfumes
+    ? retainedSources.filter((source) => source.group === group).length
+    : 0;
+const neededFor = (group) =>
+  Math.max(0, targetFor(group) - existingCountFor(group));
 const failures = [];
 sharp.concurrency(1);
 async function download(candidate, group) {
+  if (
+    existingIds.has(candidate.id) ||
+    existingSourceUrls.has(candidate.source_url.replace(/\/$/, "")) ||
+    existingProductKeys.has(productKey(candidate.brand, candidate.name))
+  )
+    return false;
   const imageKey = candidate.image.split("?")[0];
   if (seenImages.has(imageKey)) return false;
   const destination = `public/images/catalogo/${group}/${candidate.id.toLowerCase()}.webp`;
@@ -503,10 +739,13 @@ async function download(candidate, group) {
       category: candidate.category,
       description,
       image_url: `/${destination.replace(/^public\//, "")}`,
-      featured: successful[group].length < 2,
+      featured: !append && !expandPerfumes && successful[group].length < 2,
       active: true,
       created_at: "2026-10-28T12:00:00Z",
     };
+    existingIds.add(product.id);
+    existingSourceUrls.add(candidate.source_url.replace(/\/$/, ""));
+    existingProductKeys.add(productKey(product.brand, product.name));
     successful[group].push({
       product,
       source: {
@@ -541,12 +780,16 @@ async function worker() {
   while (queue.length) {
     const [group, candidates] = queue.shift();
     for (const candidate of candidates) {
-      if (successful[group].length >= 50) break;
+      if (successful[group].length >= neededFor(group)) break;
       await download(candidate, group);
       if (successful[group].length && successful[group].length % 10 === 0)
-        console.log(`${group}: ${successful[group].length}/50`);
+        console.log(
+          `${group}: ${existingCountFor(group) + successful[group].length}/${targetFor(group)}`,
+        );
     }
-    console.log(`CONCLUÍDO ${group}: ${successful[group].length} imagens`);
+    console.log(
+      `CONCLUÍDO ${group}: ${existingCountFor(group) + successful[group].length} imagens (${successful[group].length} novas)`,
+    );
   }
 }
 await Promise.all(Array.from({ length: 4 }, worker));
@@ -556,13 +799,16 @@ await writeFile(
   JSON.stringify(failures, null, 2),
 );
 const counts = Object.fromEntries(
-  Object.entries(successful).map(([key, value]) => [key, value.length]),
+  Object.entries(successful).map(([key, value]) => [
+    key,
+    value.length + existingCountFor(key),
+  ]),
 );
 await writeFile(
   resolve(research, "download-summary.json"),
   JSON.stringify(counts, null, 2),
 );
-if (Object.values(counts).some((count) => count < 50))
+if (Object.entries(counts).some(([group, count]) => count < targetFor(group)))
   throw new Error(
     `Seleções incompletas: ${JSON.stringify(counts)}. O catálogo anterior foi preservado.`,
   );
@@ -575,10 +821,23 @@ const items = roundRobin(
     })),
   ),
 );
-const products = items.map(({ product }, index) => ({
+const importedProducts = items.map(({ product }, index) => ({
   ...product,
   created_at: new Date(Date.UTC(2026, 9, 28, 12) - index * 1000).toISOString(),
 }));
+const products = [...retainedProducts, ...importedProducts];
+if (previousProducts.length) {
+  const backupDirectory = resolve(research, "catalog-backup-" + Date.now());
+  await mkdir(backupDirectory, { recursive: true });
+  await writeFile(
+    resolve(backupDirectory, "products.json"),
+    JSON.stringify(previousProducts, null, 2),
+  );
+  await writeFile(
+    resolve(backupDirectory, "image-sources.json"),
+    JSON.stringify(previousSourceRecords, null, 2),
+  );
+}
 await writeFile(
   "public/data/products.json",
   JSON.stringify(products, null, 2) + "\n",
@@ -586,7 +845,7 @@ await writeFile(
 await writeFile(
   "catalog/image-sources.json",
   JSON.stringify(
-    items.map((entry) => entry.source),
+    [...retainedSources, ...items.map((entry) => entry.source)],
     null,
     2,
   ) + "\n",

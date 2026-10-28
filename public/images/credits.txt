@@ -6,7 +6,7 @@ bag.webp: photo-1553062407-98eeb64c6a62
 sunglasses.webp: photo-1511499767150-a48a237f0083
 As imagens ilustrativas não representam garantia de marca, modelo ou disponibilidade.
 
-Catálogo de 400 referências pesquisadas em 28/10/2026:
+Catálogo de 750 referências pesquisadas em 28/10/2026:
 Fotografias de produtos dos fabricantes e lojas identificados em catalog/SOURCES.md.
 Registro individual de URL de origem, arquivo local e hash em catalog/image-sources.json.
 Imagens otimizadas localmente em WebP, servidas pela própria hospedagem.

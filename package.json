@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "catalog:import": "node scripts/import-web-catalog.mjs",
+    "catalog:import:additional": "node scripts/import-web-catalog.mjs --append",
+    "catalog:expand:perfumes": "node scripts/import-web-catalog.mjs --expand-perfumes",
     "validate:catalog": "node scripts/validate-catalog.mjs",
     "prebuild": "npm run validate:catalog",
     "build": "tsc -b && vite build",
@@ -21,6 +23,7 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.64.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

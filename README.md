@@ -4,6 +4,8 @@ Vitrine de encomendas com **catálogo e fotos locais**, publicada pelo fluxo **p
 
 O botão de pedido abre o WhatsApp **+55 41 8859-1333** com nome do produto, referência, quantidade e link preenchidos. O cliente confirma o envio no WhatsApp; a encomenda é combinada com a Kauany.
 
+O visual atual é a **V2**, com destaque para perfumaria, fontes locais e atalhos para categorias. A direção visual, os recursos de design utilizados e os arquivos da versão anterior estão documentados em [design/V2.md](design/V2.md).
+
 ## Rodar localmente
 
 ```sh
@@ -69,7 +71,9 @@ O build interrompe a publicação se houver JSON inválido, referências repetid
 
 ### Conteúdo inicial
 
-O catálogo possui **400 referências pesquisadas na web**, com 50 opções por seleção: Lattafa, Victoria’s Secret, outros perfumes importados, tecnologia, smartwatches, óculos, mochilas e beleza. Algumas opções são variações de modelos e cores. As fotografias correspondem aos produtos identificados e estão salvas em `public/images/catalogo/`.
+O catálogo possui **750 referências pesquisadas na web**, com prioridade para perfumaria: **150 opções de Lattafa e 150 de outras marcas importadas**, além de 50 referências de Victoria’s Secret. O filtro **Perfumes reúne 339 itens com fotos próprias**, sendo a maior categoria da vitrine. As seleções de tecnologia, smartwatches, óculos, mochilas, beleza, roupas, acessórios e suplementos esportivos têm 50 opções cada. Algumas opções são variações de modelos, cores, sabores ou embalagens. As fotografias correspondem aos produtos identificados e estão salvas em `public/images/catalogo/`.
+
+Suplementos são restritos à nutrição esportiva, como whey, creatina e hipercalóricos. Medicamentos, incluindo dipirona, são recusados pela validação do catálogo. Essa regra está em `catalog/supplement-rules.mjs` e vale tanto para a importação quanto para o build. Os textos não incluem doses ou promessas de resultados.
 
 As fontes e os créditos estão em [catalog/SOURCES.md](catalog/SOURCES.md), com o registro individual de origem em `catalog/image-sources.json`. O site usa o título provisório **Importados e Encomendas**, sem definir uma marca, e o atendimento é da **Kauany**.
 
@@ -105,7 +109,7 @@ Não envie `node_modules/` nem `dist/`; estão no `.gitignore` e a Vercel instal
 
 `node scripts/prepare-assets.mjs` recria essas versões usando somente os arquivos locais. Não é necessário executar esse script para cadastrar produtos ou fazer o deploy. As quatro fotos ilustrativas de skincare, fone, mochila e óculos já estão salvas localmente; sua origem está em `public/images/credits.txt`.
 
-As 400 fotos pesquisadas ficam separadas em `public/images/catalogo/`. `npm run catalog:import` pode recriar a seleção por consulta às fontes registradas; é uma ferramenta manual de pesquisa e não é executada pela Vercel. Para adicionar produtos no dia a dia, prefira editar o JSON e adicionar os arquivos locais, sem reimportar a seleção inteira.
+As 750 fotos pesquisadas ficam separadas em `public/images/catalogo/`. `npm run catalog:import` pode recriar a seleção por consulta às fontes registradas; é uma ferramenta manual de pesquisa e não é executada pela Vercel. `npm run catalog:import:additional` atualiza apenas roupas, acessórios e suplementos, preservando as outras seleções. `npm run catalog:expand:perfumes` completa as seleções de Lattafa e outros perfumes importados até 150 itens cada, sem excluir ou alterar os produtos existentes. Para adicionar produtos no dia a dia, prefira editar o JSON e adicionar os arquivos locais, sem reimportar a seleção inteira.
 
 ## Verificação
 

@@ -18,7 +18,7 @@ import {
   MessageCircle,
   Minus,
   Package,
-  Pill,
+  Dumbbell,
   Plus,
   Search,
   ShieldCheck,
@@ -49,7 +49,7 @@ const categories = [
   { id: "smartwatches", label: "Smartwatches", icon: Watch },
   { id: "oculos", label: "Óculos", icon: Glasses },
   { id: "mochilas", label: "Mochilas", icon: Backpack },
-  { id: "suplementos", label: "Suplementos", icon: Pill },
+  { id: "suplementos", label: "Suplementos", icon: Dumbbell },
   { id: "roupas", label: "Roupas", icon: Shirt },
   { id: "acessorios", label: "Acessórios", icon: Glasses },
 ];
@@ -59,11 +59,13 @@ function WhatsAppLink({
   className = "",
   product,
   quantity = 1,
+  ariaLabel,
 }: {
   children: React.ReactNode;
   className?: string;
   product?: Product;
   quantity?: number;
+  ariaLabel?: string;
 }) {
   return (
     <a
@@ -71,6 +73,7 @@ function WhatsAppLink({
       href={whatsappUrl(product, quantity)}
       target="_blank"
       rel="noopener noreferrer"
+      aria-label={ariaLabel}
     >
       {children}
     </a>
@@ -214,10 +217,12 @@ export default function App() {
     products: Product[];
     total: number;
     brands: string[];
+    categoryCounts: Record<string, number>;
   }>({
     products: [],
     total: 0,
     brands: [],
+    categoryCounts: {},
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -307,6 +312,16 @@ export default function App() {
     });
   }
   const pages = Math.ceil(result.total / PAGE_SIZE);
+  function discoverCategory(category: string) {
+    setSearch("");
+    setQuery({
+      search: "",
+      category,
+      brand: "todas",
+      sort: "destaques",
+      page: 1,
+    });
+  }
 
   return (
     <>
@@ -314,7 +329,7 @@ export default function App() {
         Pular para o catálogo
       </a>
       <div className="announcement">
-        <span>Do Paraguai, com carinho, para você.</span>
+        <span>Se está na sua lista, vamos atrás.</span>
         <span className="announcement-location">
           <MapPin size={12} /> Curitiba e região
         </span>
@@ -324,12 +339,12 @@ export default function App() {
           <a
             className="brand"
             href="#inicio"
-            aria-label="Importados e Encomendas, início"
+            aria-label="Importados & encomendas, início"
           >
             <span className="brand-name">
-              Importados<span className="brand-spark">✳</span>
+              importados<span className="brand-spark">✳</span>
             </span>
-            <span className="brand-subtitle">E ENCOMENDAS</span>
+            <span className="brand-subtitle">& encomendas</span>
           </a>
           <nav
             className={mobileMenu ? "nav open" : "nav"}
@@ -345,9 +360,12 @@ export default function App() {
               Sobre a Kauany
             </a>
           </nav>
-          <WhatsAppLink className="header-contact">
+          <WhatsAppLink
+            className="header-contact"
+            ariaLabel="Fale com a Kauany pelo WhatsApp"
+          >
             <MessageCircle size={17} />
-            <span>Vamos conversar</span>
+            <span>Fale com a Kauany</span>
             <ArrowRight size={15} />
           </WhatsAppLink>
           <button
@@ -366,60 +384,78 @@ export default function App() {
           <div className="container hero-inner">
             <div className="hero-copy">
               <div className="eyebrow">
-                <span className="tiny-line" /> SEUS FAVORITOS, POR ENCOMENDA
+                <span className="status-dot" /> CURADORIA DE IMPORTADOS, POR
+                KAUANY
               </div>
               <h1>
-                O que você ama,
-                <br />
-                mais perto <em>de você.</em>
+                <span>Seu desejo.</span>
+                <span>Minha próxima</span>
+                <em>parada.</em>
               </h1>
               <p>
-                Perfumes, beleza e muito mais. Você escolhe, a Kauany encontra
-                no Paraguai e traz para você.
+                Dos perfumes que você salva aos achadinhos que ainda vai
+                descobrir. Eu busco no Paraguai e combino cada detalhe com você.
               </p>
               <div className="hero-actions">
                 <a className="button button-wine" href="#catalogo">
-                  Explorar o catálogo <ArrowRight size={18} />
+                  Encontrar meu favorito <ArrowRight size={19} />
                 </a>
                 <a className="text-link" href="#como-funciona">
-                  Como funciona <ArrowDown size={15} />
+                  Como eu encomendo? <ArrowDown size={16} />
                 </a>
               </div>
               <div className="hero-note">
                 <span className="note-icon">
-                  <ShoppingBag size={18} strokeWidth={1.5} />
+                  <MessageCircle size={20} strokeWidth={1.5} />
                 </span>
                 <span>
-                  Uma curadoria de desejos.
+                  Cada detalhe combinado pelo WhatsApp.
                   <br />
-                  <strong>Um atendimento de pessoa para pessoa.</strong>
+                  <strong>Seu pedido começa com uma boa conversa.</strong>
                 </span>
               </div>
             </div>
             <div className="hero-visual">
-              <div className="hero-arch">
-                <img
-                  src="/images/hero-perfumes.webp"
-                  alt="Perfumes Yara da Lattafa em embalagens rosa e branca, na foto enviada pela Kauany"
-                  fetchPriority="high"
-                />
-              </div>
-              <div className="origin-stamp">
-                <span>DO PARAGUAI</span>
-                <Sparkles size={26} strokeWidth={1} />
-                <span>PARA VOCÊ</span>
-              </div>
-              <div className="hero-caption">
-                <span className="caption-star">✳</span>
+              <div className="hero-orbit" aria-hidden="true" />
+              <div className="hero-podium podium-one" aria-hidden="true" />
+              <div className="hero-podium podium-two" aria-hidden="true" />
+              <img
+                className="hero-bottle bottle-yara"
+                src="/images/catalogo/lattafa/lat-yara-rose.webp"
+                alt="Perfume Lattafa Yara Rosé"
+                fetchPriority="high"
+              />
+              <img
+                className="hero-bottle bottle-khamrah"
+                src="/images/catalogo/lattafa/lattafa-9055157158111.webp"
+                alt="Perfume Lattafa Khamrah"
+                fetchPriority="high"
+              />
+              <span className="hero-handwritten">
+                um novo favorito
+                <br />
+                te espera aqui.
+              </span>
+              <div className="hero-ticket">
                 <span>
-                  Seu próximo favorito
+                  ORIGEM
                   <br />
-                  <em>pode estar aqui.</em>
+                  <strong>PARAGUAI</strong>
                 </span>
-                <ArrowRight size={27} strokeWidth={1} />
+                <ArrowRight size={33} strokeWidth={1.2} />
+                <span>
+                  DESTINO
+                  <br />
+                  <strong>VOCÊ</strong>
+                </span>
+                <span className="ticket-stub">
+                  FEITO DE
+                  <br />
+                  BOAS ESCOLHAS
+                </span>
               </div>
-              <span className="hero-side-label">
-                ESCOLHIDOS COM CARINHO · IMPORTADOS E ENCOMENDAS
+              <span className="hero-caption">
+                <Sparkles size={15} /> PERFUMARIA & BONS ACHADOS
               </span>
             </div>
           </div>
@@ -446,20 +482,107 @@ export default function App() {
         </div>
 
         <section
+          className="discovery-section container"
+          aria-label="Seleções para explorar"
+        >
+          <div className="discovery-intro">
+            <span className="eyebrow">COMECE POR UMA BOA DESCOBERTA</span>
+            <p>
+              O seu tipo de <em>favorito.</em>
+            </p>
+          </div>
+          <div className="discovery-grid">
+            <a
+              href="#catalogo"
+              className="discovery-card discovery-perfumes"
+              onClick={() => discoverCategory("perfumes")}
+            >
+              <span className="discovery-kicker">01 / A NOSSA OBSESSÃO</span>
+              <h2>
+                Deixe a sua
+                <br />
+                <em>marca no ar.</em>
+              </h2>
+              <p>
+                Lattafa, Victoria’s Secret e os perfumes que você quer conhecer
+                de perto.
+              </p>
+              <img
+                src="/images/catalogo/lattafa/lattafa-best-9055154962655.webp"
+                alt="Perfume Lattafa Eclaire"
+                loading="lazy"
+              />
+              <span className="discovery-link">
+                Explorar {result.categoryCounts.perfumes || ""} perfumes{" "}
+                <ArrowRight size={19} />
+              </span>
+              <span className="discovery-flower" aria-hidden="true">
+                ✳
+              </span>
+            </a>
+            <a
+              href="#catalogo"
+              className="discovery-card discovery-beauty"
+              onClick={() => discoverCategory("skincare")}
+            >
+              <span className="discovery-kicker">02 / CUIDE DE VOCÊ</span>
+              <h2>
+                Seu ritual,
+                <br />
+                <em>seu momento.</em>
+              </h2>
+              <img
+                className="discovery-product"
+                src="/images/catalogo/beleza/cosrx-9073669570776.webp"
+                alt="Sérum COSRX The 6 Peptide Skin Booster"
+                loading="lazy"
+              />
+              <span className="discovery-link">
+                Beleza & skincare <ArrowRight size={19} />
+              </span>
+            </a>
+            <a
+              href="#catalogo"
+              className="discovery-card discovery-tech"
+              onClick={() => discoverCategory("eletronicos")}
+            >
+              <span className="discovery-kicker">03 / DÊ UM UPGRADE</span>
+              <h2>
+                Achados para
+                <br />
+                <em>a sua rotina.</em>
+              </h2>
+              <img
+                className="discovery-product"
+                src="/images/catalogo/tecnologia/edifier-best-763638055002.webp"
+                alt="Fone de ouvido Edifier W360NB"
+                loading="lazy"
+              />
+              <span className="discovery-link">
+                Tecnologia & mais <ArrowRight size={19} />
+              </span>
+            </a>
+          </div>
+        </section>
+
+        <section
           className="catalog-section container"
           id="catalogo"
           ref={catalogRef}
         >
           <div className="section-heading">
             <div>
-              <span className="eyebrow">ENCONTRE O SEU PRÓXIMO FAVORITO</span>
+              <span className="eyebrow">
+                A SUA PRÓXIMA DESCOBERTA ESTÁ AQUI
+              </span>
               <h2>
-                Um mundo de <em>possibilidades.</em>
+                Explore sem <em>fronteiras.</em>
               </h2>
             </div>
             <p>
-              Explore, se encante e peça.
-              <br />A gente cuida do próximo passo.
+              Seu gosto, suas escolhas.
+              <br />
+              Eu cuido de encontrar o caminho.
             </p>
           </div>
           <div
@@ -643,15 +766,15 @@ export default function App() {
                     aria-label={`Ver detalhes de ${product.name}`}
                   >
                     <ProductImage product={product} />
-                    {product.featured && (
-                      <span className="product-badge">
-                        <Sparkles size={11} /> Seleção de importados
-                      </span>
-                    )}
                     <span className="product-view">
                       <Plus size={18} />
                     </span>
                   </button>
+                  {product.featured && (
+                    <span className="product-badge">
+                      <Sparkles size={12} /> NO RADAR
+                    </span>
+                  )}
                   <div className="product-info">
                     <span className="product-brand">
                       {product.brand ||
@@ -794,7 +917,6 @@ export default function App() {
               href="/images/encomendas.webp"
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="Ver material de divulgação das encomendas da Kauany"
             >
               <Sparkles size={23} strokeWidth={1} />
               <span>
@@ -897,7 +1019,7 @@ export default function App() {
         <div className="footer-main">
           <a className="brand" href="#inicio">
             <span className="brand-name">
-              Importados<span className="brand-spark">✳</span>
+              importados<span className="brand-spark">✳</span>
             </span>
             <span className="brand-subtitle">E ENCOMENDAS</span>
           </a>

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import type { Product } from "../src/lib/catalog";
+import AxeBuilder from "@axe-core/playwright";
 
 const catalog: Product[] = JSON.parse(
   readFileSync(
@@ -20,13 +21,15 @@ test("catálogo com imagens locais e layout sem rolagem lateral", async ({
   page,
 }, testInfo) => {
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "O que você ama",
+    "Seu desejo.",
   );
   await expect(page.locator(".demo-notice")).toHaveCount(0);
   await expect(page).toHaveTitle(
     "Importados e Encomendas — Seus desejos, por encomenda",
   );
-  await expect(page.locator('.nav a[href="#sobre"]')).toHaveText("Sobre a Kauany");
+  await expect(page.locator('.nav a[href="#sobre"]')).toHaveText(
+    "Sobre a Kauany",
+  );
   await expect(page.locator(".catalog-meta")).toContainText(
     `${active.length} produtos`,
   );
@@ -81,6 +84,38 @@ test("catálogo com imagens locais e layout sem rolagem lateral", async ({
     path: `artifacts/home-${testInfo.project.name}.png`,
     fullPage: true,
   });
+});
+
+test("seleções editoriais abrem o catálogo na categoria escolhida", async ({
+  page,
+}) => {
+  for (const [selector, category] of [
+    [".discovery-perfumes", "perfumes"],
+    [".discovery-beauty", "skincare"],
+    [".discovery-tech", "eletronicos"],
+  ]) {
+    await page.locator(selector).click();
+    const expected = active.filter(
+      (product) => product.category === category,
+    ).length;
+    await expect(page.locator(".catalog-meta")).toContainText(
+      `${expected} produtos`,
+    );
+    await expect(page.locator(".product-card")).toHaveCount(
+      Math.min(12, expected),
+    );
+    await expect(page).toHaveURL(/#catalogo$/);
+  }
+});
+
+test("contraste e controles passam na verificação automática de acessibilidade", async ({
+  page,
+}) => {
+  await page.evaluate(() => document.fonts.ready);
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
 });
 
 test("paginação e filtros reutilizam o JSON local e ocultam produtos inativos", async ({
@@ -170,7 +205,14 @@ test("busca sem acentos, filtro de categoria e restauração", async ({
     .locator(".product-card .product-brand")
     .allTextContents())
     expect(brand).toBe("Victoria’s Secret");
-  await page.getByRole("button", { name: "Suplementos", exact: true }).click();
+  for (const category of ["Suplementos", "Roupas", "Acessórios"]) {
+    await page.getByRole("button", { name: category, exact: true }).click();
+    await expect(page.locator(".catalog-meta")).toContainText("50 produtos");
+    await expect(page.locator(".product-card")).toHaveCount(12);
+  }
+  await page
+    .getByRole("searchbox", { name: "Buscar produtos" })
+    .fill("PRODUTO_INEXISTENTE_99999");
   await expect(
     page.getByRole("heading", { name: "Seu desejo pode ir além do catálogo." }),
   ).toBeVisible();

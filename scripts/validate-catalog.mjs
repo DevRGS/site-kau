@@ -1,6 +1,7 @@
 import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isSportsSupplementName } from "../catalog/supplement-rules.mjs";
 
 const categories = new Set([
   "perfumes",
@@ -65,6 +66,14 @@ export async function validateCatalog(
     }
     if (!categories.has(product.category))
       errors.push(`${label}: categoria inválida.`);
+    if (
+      product.category === "suplementos" &&
+      !isSportsSupplementName(product.name)
+    ) {
+      errors.push(
+        `${label}: a categoria suplementos aceita somente nutrição esportiva, como whey, creatina e hipercalóricos; medicamentos não são aceitos.`,
+      );
+    }
     for (const field of ["featured", "active"]) {
       if (typeof product[field] !== "boolean")
         errors.push(`${label}: ${field} deve ser true ou false.`);

@@ -65,9 +65,24 @@ async function loadProducts(signal: AbortSignal): Promise<Product[]> {
 export async function getProducts(
   query: CatalogQuery,
   signal: AbortSignal,
-): Promise<{ products: Product[]; total: number; brands: string[] }> {
+): Promise<{
+  products: Product[];
+  total: number;
+  brands: string[];
+  categoryCounts: Record<string, number>;
+}> {
   const search = normalize(query.search.trim());
-  const categoryProducts = (await loadProducts(signal)).filter(
+  const activeProducts = (await loadProducts(signal)).filter(
+    (product) => product.active,
+  );
+  const categoryCounts = activeProducts.reduce<Record<string, number>>(
+    (counts, product) => {
+      counts[product.category] = (counts[product.category] || 0) + 1;
+      return counts;
+    },
+    {},
+  );
+  const categoryProducts = activeProducts.filter(
     (product) =>
       product.active &&
       (query.category === "todos" || product.category === query.category),
@@ -100,6 +115,7 @@ export async function getProducts(
     ),
     total: products.length,
     brands,
+    categoryCounts,
   };
 }
 
