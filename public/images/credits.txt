@@ -1,0 +1,12 @@
+Fotos de perfumes e body splashes: image2.png, fornecida pelo usuário.
+Fotos ilustrativas já salvas localmente, originalmente do Unsplash (images.unsplash.com):
+skincare.webp: photo-1608571423902-eed4a5ad8108
+headphones.webp: photo-1546435770-a3e426bf472b
+bag.webp: photo-1553062407-98eeb64c6a62
+sunglasses.webp: photo-1511499767150-a48a237f0083
+As imagens ilustrativas não representam garantia de marca, modelo ou disponibilidade.
+
+Catálogo de 400 referências pesquisadas em 28/10/2026:
+Fotografias de produtos dos fabricantes e lojas identificados em catalog/SOURCES.md.
+Registro individual de URL de origem, arquivo local e hash em catalog/image-sources.json.
+Imagens otimizadas localmente em WebP, servidas pela própria hospedagem.
